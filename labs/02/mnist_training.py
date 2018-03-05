@@ -22,23 +22,20 @@ class Network:
 
             # Computation
             flattened_images = tf.layers.flatten(self.images, name="flatten")
-            # TODO: add args.layers hidden layers with activations given by
-            # args.activation and store results in hidden_layer. Possible
-            # activations are none, relu, tanh and sigmoid.
+            hidden_layer = tf.layers.dense(flattened_images, args.hidden_layer, activation=tf.nn.relu, name="hidden_layer")
             output_layer = tf.layers.dense(hidden_layer, self.LABELS, activation=None, name="output_layer")
             self.predictions = tf.argmax(output_layer, axis=1)
 
             # Training
             loss = tf.losses.sparse_softmax_cross_entropy(self.labels, output_layer, scope="loss")
             global_step = tf.train.create_global_step()
-            self.training = tf.train.GradientDescentOptimizer(0.03).minimize(loss, global_step=global_step, name="training")
+
+            # TODO: Create `optimizer` according to arguments ("SGD", "SGD" with momentum, or "Adam"),
+            # utilizing specified learning rate according to args.learning_rate and args.learning_rate_final.
+            self.training = optimizer.minimize(loss, global_step=global_step, name="training")
 
             # Summaries
             accuracy = tf.reduce_mean(tf.cast(tf.equal(self.labels, self.predictions), tf.float32))
-            confusion_matrix = tf.reshape(tf.confusion_matrix(self.labels, self.predictions,
-                                                              weights=tf.not_equal(self.labels, self.predictions), dtype=tf.float32),
-                                          [1, self.LABELS, self.LABELS, 1])
-
             summary_writer = tf.contrib.summary.create_file_writer(args.logdir, flush_millis=10 * 1000)
             self.summaries = {}
             with summary_writer.as_default(), tf.contrib.summary.record_summaries_every_n_global_steps(100):
@@ -46,8 +43,7 @@ class Network:
                                            tf.contrib.summary.scalar("train/accuracy", accuracy)]
             with summary_writer.as_default(), tf.contrib.summary.always_record_summaries():
                 for dataset in ["dev", "test"]:
-                    self.summaries[dataset] = [tf.contrib.summary.scalar(dataset + "/accuracy", accuracy),
-                                               tf.contrib.summary.image(dataset + "/confusion_matrix", confusion_matrix)]
+                    self.summaries[dataset] = tf.contrib.summary.scalar(dataset + "/accuracy", accuracy)
 
             # Initialize variables
             self.session.run(tf.global_variables_initializer())
@@ -65,17 +61,20 @@ if __name__ == "__main__":
     import argparse
     import datetime
     import os
+    import re
 
     # Fix random seed
     np.random.seed(42)
 
     # Parse arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument("--activation", default="none", type=str, help="Activation function.")
     parser.add_argument("--batch_size", default=50, type=int, help="Batch size.")
-    parser.add_argument("--epochs", default=10, type=int, help="Number of epochs.")
-    parser.add_argument("--hidden_layer", default=100, type=int, help="Size of the hidden layer.")
-    parser.add_argument("--layers", default=1, type=int, help="Number of layers.")
+    parser.add_argument("--epochs", default=20, type=int, help="Number of epochs.")
+    parser.add_argument("--hidden_layer", default=200, type=int, help="Size of the hidden layer.")
+    parser.add_argument("--learning_rate", default=0.01, type=float, help="Initial learning rate.");
+    parser.add_argument("--learning_rate_final", default=None, type=float, help="Final learning rate.");
+    parser.add_argument("--momentum", default=None, type=float, help="Momentum.");
+    parser.add_argument("--optimizer", default="SGD", type=str, help="Optimizer to use.");
     parser.add_argument("--threads", default=1, type=int, help="Maximum number of threads to use.")
     args = parser.parse_args()
 
@@ -83,7 +82,7 @@ if __name__ == "__main__":
     args.logdir = "logs/{}-{}-{}".format(
         os.path.basename(__file__),
         datetime.datetime.now().strftime("%Y-%m-%d_%H%M%S"),
-        ",".join(map(lambda arg:"{}={}".format(*arg), sorted(vars(args).items())))
+        ",".join(("{}={}".format(re.sub("(.)[^_]*_?", r"\1", key), value) for key, value in sorted(vars(args).items())))
     )
     if not os.path.exists("logs"): os.mkdir("logs") # TF 1.6 will do this by itself
 
@@ -96,6 +95,7 @@ if __name__ == "__main__":
     # Additionally, loading of the dataset prints to stdout -- this loading message
     # is part of expected output when evaluating on ReCodEx.
     mnist = mnist.input_data.read_data_sets(".", reshape=False, seed=42)
+    batches_per_epoch = mnist.train.num_examples // args.batch_size
 
     # Construct the network
     network = Network(threads=args.threads)
@@ -103,12 +103,13 @@ if __name__ == "__main__":
 
     # Train
     for i in range(args.epochs):
-        while mnist.train.epochs_completed == i:
+        for b in range(batches_per_epoch):
             images, labels = mnist.train.next_batch(args.batch_size)
             network.train(images, labels)
 
         network.evaluate("dev", mnist.validation.images, mnist.validation.labels)
     network.evaluate("test", mnist.test.images, mnist.test.labels)
 
-    # TODO: Compute and print accuracy on the test set. Print accuracy as
-    # percentage rounded on two decimal places, e.g., 91.23
+    # TODO: Compute accuracy on the test set and print it as percentage rounded
+    # to two decimal places.
+    print("{:.2f}".format(100 * accuracy))
