@@ -22,9 +22,22 @@ class Network:
 
             # Computation
             flattened_images = tf.layers.flatten(self.images, name="flatten")
+
             # TODO: add args.layers hidden layers with activations given by
             # args.activation and store results in hidden_layer. Possible
             # activations are none, relu, tanh and sigmoid.
+            hidden_layer = flattened_images
+            activation = None
+            if args.activation == 'relu':
+                activation = tf.nn.relu
+            elif args.activation == 'tanh':
+                activation = tf.nn.tanh
+            elif args.activation == 'sigmoid':
+                activation = tf.nn.sigmoid
+            for i in range(args.layers):
+                hidden_layer = tf.layers.dense(hidden_layer, args.hidden_layer,
+                        activation=activation, name="hidden_layer_"+str(i))
+
             output_layer = tf.layers.dense(hidden_layer, self.LABELS, activation=None, name="output_layer")
             self.predictions = tf.argmax(output_layer, axis=1)
 
