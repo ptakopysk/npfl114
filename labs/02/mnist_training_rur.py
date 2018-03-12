@@ -120,7 +120,7 @@ if __name__ == "__main__":
 
     # Train
     for i in range(args.epochs):
-        for b in range(batches_per_epoch):
+        for b in range(args.batches_per_epoch):
             images, labels = mnist.train.next_batch(args.batch_size)
             network.train(images, labels)
 
