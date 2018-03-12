@@ -30,10 +30,20 @@ class Network:
             loss = tf.losses.sparse_softmax_cross_entropy(self.labels, output_layer, scope="loss")
             global_step = tf.train.create_global_step()
 
-            # TODO: Create `optimizer` according to arguments ("SGD", "SGD" with momentum, or "Adam"),
-            # utilizing specified learning rate according to args.learning_rate and args.learning_rate_final.
+            if args.learning_rate_final:
+                # compute parameters
+                decay_rate = (args.learning_rate_final/args.learning_rate)**(1/(args.epochs-1))
+                learning_rate = tf.train.exponential_decay(args.learning_rate,
+                        global_step, args.batches_per_epoch, decay_rate, staircase=True,
+                        name="learning_rate")
+            else:
+                learning_rate = args.learning_rate
+
             if args.optimizer == 'SGD':
-                optimizer = tf.train.GradientDescentOptimizer(learning_rate)
+                if args.momentum:
+                    optimizer = tf.train.MomentumOptimizer(learning_rate, args.momentum)
+                else:
+                    optimizer = tf.train.GradientDescentOptimizer(learning_rate)
             elif args.optimizer == 'Adam':
                 optimizer = tf.train.AdamOptimizer(learning_rate)
             else:
@@ -46,6 +56,7 @@ class Network:
             self.summaries = {}
             with summary_writer.as_default(), tf.contrib.summary.record_summaries_every_n_global_steps(100):
                 self.summaries["train"] = [tf.contrib.summary.scalar("train/loss", loss),
+                                           tf.contrib.summary.scalar("train/learning_rate", learning_rate),
                                            tf.contrib.summary.scalar("train/accuracy", self.accuracy)]
             with summary_writer.as_default(), tf.contrib.summary.always_record_summaries():
                 for dataset in ["dev", "test"]:
@@ -101,7 +112,7 @@ if __name__ == "__main__":
     # Additionally, loading of the dataset prints to stdout -- this loading message
     # is part of expected output when evaluating on ReCodEx.
     mnist = mnist.input_data.read_data_sets(".", reshape=False, seed=42)
-    batches_per_epoch = mnist.train.num_examples // args.batch_size
+    args.batches_per_epoch = mnist.train.num_examples // args.batch_size
 
     # Construct the network
     network = Network(threads=args.threads)
@@ -116,6 +127,6 @@ if __name__ == "__main__":
         network.evaluate("dev", mnist.validation.images, mnist.validation.labels)
     accuracy = network.evaluate("test", mnist.test.images, mnist.test.labels)
 
-    # TODO: Compute accuracy on the test set and print it as percentage rounded
+    # Compute accuracy on the test set and print it as percentage rounded
     # to two decimal places.
     print("{:.2f}".format(100 * accuracy))
