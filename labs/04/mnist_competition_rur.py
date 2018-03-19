@@ -55,9 +55,9 @@ class Network:
                             int(parameters[1]),
                             int(parameters[2]))
                 elif parameters[0] == 'F':
-                    layer = tf.layers.flatten(layer, name="flatten")
+                    layer = tf.layers.flatten(layer)
                 elif parameters[0] == 'R':
-                    layer = tf.layers.dense(layer, int(parameters[1]), activation=tf.nn.relu, name="hidden_layer")
+                    layer = tf.layers.dense(layer, int(parameters[1]), activation=tf.nn.relu)
                 else:
                     assert False, "invalid definition " + definition
 
