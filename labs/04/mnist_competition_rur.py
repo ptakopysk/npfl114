@@ -24,6 +24,51 @@ class Network:
         with self.session.graph.as_default():
             # TODO: Construct the network and training operation.
 
+            # Inputs
+            self.images = tf.placeholder(tf.float32, [None, self.WIDTH, self.HEIGHT, 1], name="images")
+            self.labels = tf.placeholder(tf.int64, [None], name="labels")
+            self.is_training = tf.placeholder(tf.bool, [], name="is_training")
+
+            # Computation
+            # TODO: Add layers described in the args.cnn. Layers are separated by a comma and can be:
+            # - C-filters-kernel_size-stride-padding: Add a convolutional layer with ReLU activation and
+            #   specified number of filters, kernel size, stride and padding. Example: C-10-3-1-same
+            # - M-kernel_size-stride: Add max pooling with specified size and stride. Example: M-3-2
+            # - F: Flatten inputs --- tim se ztratí shape takže už nejde dělal
+            # cnn ale zato jde dělat densely connected (někdy to tam přijde
+            # takže nakonec to bude v poho)
+            # - R-hidden_layer_size: Add a dense layer with ReLU activation and specified size. Ex: R-100
+            # Store result in `features`.
+
+            layer = self.images
+            for definition in args.cnn.split(','):
+                parameters = definition.split('-')
+                if parameters[0] == 'C':
+                    layer = tf.layers.conv2d(layer,
+                            int(parameters[1]),
+                            int(parameters[2]),
+                            int(parameters[3]),
+                            parameters[4],
+                            activation=tf.nn.relu)
+                elif parameters[0] == 'M':
+                    layer = tf.layers.max_pooling2d(layer,
+                            int(parameters[1]),
+                            int(parameters[2]))
+                elif parameters[0] == 'F':
+                    layer = tf.layers.flatten(layer, name="flatten")
+                elif parameters[0] == 'R':
+                    layer = tf.layers.dense(layer, int(parameters[1]), activation=tf.nn.relu, name="hidden_layer")
+                else:
+                    assert False, "invalid definition " + definition
+
+            output_layer = tf.layers.dense(layer, self.LABELS, activation=None, name="output_layer")
+            self.predictions = tf.argmax(output_layer, axis=1)
+
+            # Training
+            loss = tf.losses.sparse_softmax_cross_entropy(self.labels, output_layer, scope="loss")
+            global_step = tf.train.create_global_step()
+            self.training = tf.train.AdamOptimizer().minimize(loss, global_step=global_step, name="training")
+
             # Summaries
             self.accuracy = tf.reduce_mean(tf.cast(tf.equal(self.labels, self.predictions), tf.float32))
             summary_writer = tf.contrib.summary.create_file_writer(args.logdir, flush_millis=10 * 1000)
@@ -43,12 +88,13 @@ class Network:
 
     def train(self, images, labels):
         # TODO
-        pass
+        self.session.run([self.training, self.summaries["train"]], {self.images: images, self.labels: labels})
 
     def evaluate(self, dataset, images, labels):
         # TODO
-        pass
-
+        predictions, _ = self.session.run([self.predictions, self.summaries[dataset]], {self.images: images, self.labels: labels})
+        return predictions
+       
 
 if __name__ == "__main__":
     import argparse
@@ -61,8 +107,9 @@ if __name__ == "__main__":
 
     # Parse arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument("--batch_size", default=None, type=int, help="Batch size.")
-    parser.add_argument("--epochs", default=None, type=int, help="Number of epochs.")
+    parser.add_argument("--cnn", default="C-10-3-2-same,M-3-2,F,R-100", type=str, help="Description of the CNN architecture.")
+    parser.add_argument("--batch_size", default=50, type=int, help="Batch size.")
+    parser.add_argument("--epochs", default=10, type=int, help="Number of epochs.")
     parser.add_argument("--threads", default=1, type=int, help="Maximum number of threads to use.")
     args = parser.parse_args()
 
@@ -91,6 +138,8 @@ if __name__ == "__main__":
         network.evaluate("dev", mnist.validation.images, mnist.validation.labels)
 
     # TODO: Compute test_labels, as numbers 0-9, corresponding to mnist.test.images
+    predictions = network.evaluate("test", mnist.validation.images, mnist.validation.labels)
+    test_labels = predictions
 
     for label in test_labels:
         print(label)
