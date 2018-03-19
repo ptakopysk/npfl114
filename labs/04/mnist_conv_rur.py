@@ -29,11 +29,33 @@ class Network:
             #   specified number of filters, kernel size, stride and padding. Example: C-10-3-1-same
             # - M-kernel_size-stride: Add max pooling with specified size and stride. Example: M-3-2
             # - F: Flatten inputs --- tim se ztratí shape takže už nejde dělal
-            # cnn ale zato jde dělat densely connected
+            # cnn ale zato jde dělat densely connected (někdy to tam přijde
+            # takže nakonec to bude v poho)
             # - R-hidden_layer_size: Add a dense layer with ReLU activation and specified size. Ex: R-100
             # Store result in `features`.
 
-            output_layer = tf.layers.dense(features, self.LABELS, activation=None, name="output_layer")
+            layer = self.images
+            for definition in args.cnn.split(','):
+                parameters = definition.split('-')
+                if parameters[0] == 'C':
+                    layer = tf.layers.conv2d(layer,
+                            int(parameters[1]),
+                            int(parameters[2]),
+                            int(parameters[3]),
+                            parameters[4],
+                            activation=tf.nn.relu)
+                elif parameters[0] == 'M':
+                    layer = tf.layers.max_pooling2d(layer,
+                            int(parameters[1]),
+                            int(parameters[2]))
+                elif parameters[0] == 'F':
+                    layer = tf.layers.flatten(layer, name="flatten")
+                elif parameters[0] == 'R':
+                    layer = tf.layers.dense(layer, int(parameters[1]), activation=tf.nn.relu, name="hidden_layer")
+                else:
+                    assert False, "invalid definition " + definition
+
+            output_layer = tf.layers.dense(layer, self.LABELS, activation=None, name="output_layer")
             self.predictions = tf.argmax(output_layer, axis=1)
 
             # Training
