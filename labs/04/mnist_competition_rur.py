@@ -71,7 +71,14 @@ class Network:
             # Training
             loss = tf.losses.sparse_softmax_cross_entropy(self.labels, output_layer, scope="loss")
             global_step = tf.train.create_global_step()
-            self.training = tf.train.AdamOptimizer().minimize(loss, global_step=global_step, name="training")
+            learning_rate = args.learning_rate
+            if args.learning_rate_final:
+                # compute parameters
+                decay_rate = (args.learning_rate_final/args.learning_rate)**(1/(args.epochs-1))
+                learning_rate = tf.train.exponential_decay(args.learning_rate,
+                        global_step, args.batches_per_epoch, decay_rate, staircase=True,
+                        name="learning_rate")
+            self.training = tf.train.AdamOptimizer(learning_rate).minimize(loss, global_step=global_step, name="training")
 
             # Summaries
             self.accuracy = tf.reduce_mean(tf.cast(tf.equal(self.labels, self.predictions), tf.float32))
@@ -116,6 +123,8 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", default=50, type=int, help="Batch size.")
     parser.add_argument("--epochs", default=10, type=int, help="Number of epochs.")
     parser.add_argument("--threads", default=1, type=int, help="Maximum number of threads to use.")
+    parser.add_argument("--learning_rate", default=0.001, type=float, help="Initial learning rate.");
+    parser.add_argument("--learning_rate_final", default=None, type=float, help="Final learning rate.");
     args = parser.parse_args()
 
     # Create logdir name
@@ -129,6 +138,7 @@ if __name__ == "__main__":
     # Load the data
     from tensorflow.examples.tutorials import mnist
     mnist = mnist.input_data.read_data_sets("mnist-gan", reshape=False, seed=42)
+    args.batches_per_epoch = mnist.train.num_examples // args.batch_size
 
     # Construct the network
     network = Network(threads=args.threads)
