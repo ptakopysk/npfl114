@@ -26,7 +26,7 @@ class Dataset:
         self._window = window
 
         # Load the data
-        with open(filename, "r") as file:
+        with open(filename, "r", encoding="utf-8") as file:
             self._text = file.read()
 
         # Create alphabet_map
@@ -49,12 +49,12 @@ class Dataset:
 
         # Remap input characters using the alphabet_map
         self._lcletters = np.zeros(len(self._text) + 2 * window, np.uint8)
-        self._labels = np.zeros(len(self._text), np.bool)
+        self._labels = np.zeros(len(self._text), np.int32)
         for i in range(len(self._text)):
             char = self._text[i].lower()
             if char not in alphabet_map: char = "<unk>"
             self._lcletters[i + window] = alphabet_map[char]
-            self._labels[i] = self._text[i].isupper()
+            self._labels[i] = 1 if self._text[i].isupper() else 0
 
         # Compute alphabet
         self._alphabet = [""] * len(alphabet_map)
@@ -112,11 +112,34 @@ class Network:
         with self.session.graph.as_default():
             # Inputs
             self.windows = tf.placeholder(tf.int32, [None, 2 * args.window + 1], name="windows")
-            self.labels = tf.placeholder(tf.bool, [None], name="labels") # Or you can use tf.int32
+            self.labels = tf.placeholder(tf.int64, [None], name="labels") # Or you can use tf.int32
 
             # TODO: Define a suitable network with appropriate loss function
+            onehot = tf.one_hot(self.windows, args.alphabet_size)
+            input_layer = tf.layers.dense(onehot, 100,
+                    activation=tf.nn.relu)
+            hidden_layer = tf.layers.dense(input_layer, 100,
+                    activation=tf.nn.relu)
+            flat = tf.layers.flatten(hidden_layer)
+            # self.output_layer = tf.layers.dense(flat, 1, activation=None)
+            self.output_layer = tf.layers.dense(flat, 2, activation=None)
+            
+            self.predictions = tf.argmax(self.output_layer, axis=1)
+
+            #threshold = tf.constant(0.5)
+            #def r1(): return tf.constant(1)
+            #def r0(): return tf.constant(0)
+            #self.predictions = tf.cond(tf.greater(self.output_layer, threshold), r1, r0)
+            
+            #self.predictions = self.output_layer
 
             # TODO: Define training
+            loss = tf.losses.sparse_softmax_cross_entropy(self.labels,
+                    self.output_layer, scope="loss")
+            # loss = tf.losses.sparse_softmax_cross_entropy(self.labels,
+            #         self.predictions, scope="loss")
+            self.training = tf.train.AdamOptimizer().minimize(loss,
+                    global_step=tf.train.create_global_step())
 
             # Summaries
             self.accuracy = tf.reduce_mean(tf.cast(tf.equal(self.labels, self.predictions), tf.float32))
@@ -139,7 +162,7 @@ class Network:
         self.session.run([self.training, self.summaries["train"]], {self.windows: windows, self.labels: labels})
 
     def evaluate(self, dataset, windows, labels):
-        return self.session.run(self.summaries[dataset], {self.windows: windows, self.labels: labels})
+        return self.session.run((self.accuracy, self.predictions, self.summaries[dataset]), {self.windows: windows, self.labels: labels})
 
 
 if __name__ == "__main__":
@@ -152,13 +175,12 @@ if __name__ == "__main__":
     np.random.seed(42)
 
     # Parse arguments
-    # TODO vymyslet si nějaký defaultní parametry
     parser = argparse.ArgumentParser()
-    parser.add_argument("--alphabet_size", default=None, type=int, help="Alphabet size.")
-    parser.add_argument("--batch_size", default=None, type=int, help="Batch size.")
-    parser.add_argument("--epochs", default=None, type=int, help="Number of epochs.")
+    parser.add_argument("--alphabet_size", default=100, type=int, help="Alphabet size.")
+    parser.add_argument("--batch_size", default=50, type=int, help="Batch size.")
+    parser.add_argument("--epochs", default=10, type=int, help="Number of epochs.")
     parser.add_argument("--threads", default=1, type=int, help="Maximum number of threads to use.")
-    parser.add_argument("--window", default=None, type=int, help="Size of the window to use.")
+    parser.add_argument("--window", default=5, type=int, help="Size of the window to use.")
     args = parser.parse_args()
 
     # Create logdir name
@@ -188,3 +210,12 @@ if __name__ == "__main__":
         network.evaluate("dev", dev_windows, dev_labels)
 
     # TODO: Generate the uppercased test set
+    test_windows, test_labels = test.all_data()
+    accuracy, predictions, _ = network.evaluate("test", test_windows, test_labels)
+    print(accuracy)
+    result = ""
+    for letter, prediction in zip(test.text(), predictions):
+        # result += letter.upper() if prediction else letter.lower()
+        result += letter.upper() if prediction > 0.5 else letter.lower()
+    print(result)
+
