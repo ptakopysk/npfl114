@@ -38,6 +38,7 @@ class Network:
             # cnn ale zato jde dělat densely connected (někdy to tam přijde
             # takže nakonec to bude v poho)
             # - R-hidden_layer_size: Add a dense layer with ReLU activation and specified size. Ex: R-100
+            # - D-rate: Add dropout with given rate
             # Store result in `features`.
 
             layer = self.images
@@ -58,6 +59,9 @@ class Network:
                     layer = tf.layers.flatten(layer)
                 elif parameters[0] == 'R':
                     layer = tf.layers.dense(layer, int(parameters[1]), activation=tf.nn.relu)
+                elif parameters[0] == 'D':
+                    layer = tf.layers.dropout(layer, rate=float(parameters[1]),
+                            training=self.is_training)
                 else:
                     assert False, "invalid definition " + definition
 
@@ -87,13 +91,14 @@ class Network:
                 tf.contrib.summary.initialize(session=self.session, graph=self.session.graph)
 
     def train(self, images, labels):
-        # TODO
-        self.session.run([self.training, self.summaries["train"]], {self.images: images, self.labels: labels})
+        self.session.run([self.training, self.summaries["train"]],
+            {self.images: images, self.labels: labels, self.is_training: True})
 
     def evaluate(self, dataset, images, labels):
-        # TODO
-        predictions, _ = self.session.run([self.predictions, self.summaries[dataset]], {self.images: images, self.labels: labels})
-        return predictions
+        accuracy, predictions, _ = self.session.run([self.accuracy,
+            self.predictions, self.summaries[dataset]],
+            {self.images: images, self.labels: labels, self.is_training: False})
+        return (accuracy, predictions)
        
 
 if __name__ == "__main__":
@@ -135,10 +140,13 @@ if __name__ == "__main__":
             images, labels = mnist.train.next_batch(args.batch_size)
             network.train(images, labels)
 
-        network.evaluate("dev", mnist.validation.images, mnist.validation.labels)
+        accuracy = network.evaluate("dev", mnist.validation.images,
+                mnist.validation.labels)[0]
+        print("{:.2f}".format(100 * accuracy))
 
     # TODO: Compute test_labels, as numbers 0-9, corresponding to mnist.test.images
-    predictions = network.evaluate("test", mnist.validation.images, mnist.validation.labels)
+    predictions = network.evaluate("test", mnist.validation.images,
+            mnist.validation.labels)[1]
     test_labels = predictions
 
     for label in test_labels:
