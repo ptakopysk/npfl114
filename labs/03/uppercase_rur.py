@@ -116,10 +116,11 @@ class Network:
 
             # TODO: Define a suitable network with appropriate loss function
             onehot = tf.one_hot(self.windows, args.alphabet_size)
-            flat = tf.layers.flatten(onehot)
-            # input_layer = tf.layers.dense(onehot, 100, activation=tf.nn.relu)
-            hidden_layer = tf.layers.dense(flat, 100, activation=tf.nn.relu)
-            # flat = tf.layers.flatten(hidden_layer)
+            input_layer = tf.layers.dense(onehot, 100,
+                    activation=tf.nn.relu)
+            hidden_layer = tf.layers.dense(input_layer, 100,
+                    activation=tf.nn.relu)
+            flat = tf.layers.flatten(hidden_layer)
             # self.output_layer = tf.layers.dense(flat, 1, activation=None)
             self.output_layer = tf.layers.dense(flat, 2, activation=None)
             
@@ -213,7 +214,7 @@ if __name__ == "__main__":
     accuracy, predictions, _ = network.evaluate("test", test_windows, test_labels)
     print(accuracy)
     result = ""
-    for letter, prediction in zip(test.text(), predictions):
+    for letter, prediction in zip(test.text, predictions):
         # result += letter.upper() if prediction else letter.lower()
         result += letter.upper() if prediction > 0.5 else letter.lower()
     print(result)
