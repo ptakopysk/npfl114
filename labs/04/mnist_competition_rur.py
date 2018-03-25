@@ -102,10 +102,14 @@ class Network:
             {self.images: images, self.labels: labels, self.is_training: True})
 
     def evaluate(self, dataset, images, labels):
-        accuracy, predictions, _ = self.session.run([self.accuracy,
-            self.predictions, self.summaries[dataset]],
+        accuracy, _ = self.session.run([self.accuracy, self.summaries[dataset]],
             {self.images: images, self.labels: labels, self.is_training: False})
-        return (accuracy, predictions)
+        return accuracy
+       
+    def predict(self, dataset, images, labels):
+        predictions = self.session.run(self.predictions,
+            {self.images: images, self.labels: labels, self.is_training: False})
+        return predictions
        
 
 if __name__ == "__main__":
@@ -150,13 +154,11 @@ if __name__ == "__main__":
             images, labels = mnist.train.next_batch(args.batch_size)
             network.train(images, labels)
 
-        accuracy = network.evaluate("dev", mnist.validation.images,
-                mnist.validation.labels)[0]
+        accuracy = network.evaluate("dev", mnist.validation.images, mnist.validation.labels)
         print("{:.2f}".format(100 * accuracy))
 
     # TODO: Compute test_labels, as numbers 0-9, corresponding to mnist.test.images
-    predictions = network.evaluate("test", mnist.test.images,
-            mnist.test.labels)[1]
+    predictions = network.predict("test", mnist.test.images, mnist.test.labels)
     test_labels = predictions
 
     for label in test_labels:
