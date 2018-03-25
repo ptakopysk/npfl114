@@ -120,14 +120,16 @@ class Network:
 
             # TODO: Define a suitable network with appropriate loss function
             onehot = tf.one_hot(self.windows, args.alphabet_size)
-            input_layer = tf.layers.dense(onehot, args.hidden_size,
-                    activation=tf.nn.relu)
+            flat = tf.layers.flatten(onehot)
+            #input_layer = tf.layers.dense(onehot, args.hidden_size,
+            #        activation=tf.nn.relu)
+            input_layer = tf.layers.dense(flat, args.hidden_size, activation=tf.nn.relu)
             input_layer_dropout = tf.layers.dropout(input_layer, rate=args.dropout, training=self.dropout)
-            hidden_layer = tf.layers.dense(input_layer_dropout, args.hidden_size,
-                    activation=tf.nn.relu)
-            flat = tf.layers.flatten(hidden_layer)
+            hidden_layer = tf.layers.dense(input_layer_dropout, args.hidden_size, activation=tf.nn.relu)
+            # flat = tf.layers.flatten(hidden_layer)
             # self.output_layer = tf.layers.dense(flat, 1, activation=None)
-            self.output_layer = tf.layers.dense(flat, 2, activation=None)
+            # self.output_layer = tf.layers.dense(flat, 2, activation=None)
+            self.output_layer = tf.layers.dense(hidden_layer, 2, activation=None)
             
             self.predictions = tf.argmax(self.output_layer, axis=1)
 
