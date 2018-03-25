@@ -81,6 +81,9 @@ class Dataset:
     def labels(self):
         return self._labels
 
+    def num_examples(self):
+        return len(self._labels)
+
     # to je na to abych moh vbyprodukovatř výstup: budu mít true/false predicke
     # a tadyztoho namapujzu ty znaky na uc/lc varianty
     def all_data(self):
@@ -113,12 +116,14 @@ class Network:
             # Inputs
             self.windows = tf.placeholder(tf.int32, [None, 2 * args.window + 1], name="windows")
             self.labels = tf.placeholder(tf.int64, [None], name="labels") # Or you can use tf.int32
+            self.dropout  = tf.placeholder(tf.bool, [], name="dropout")
 
             # TODO: Define a suitable network with appropriate loss function
             onehot = tf.one_hot(self.windows, args.alphabet_size)
-            input_layer = tf.layers.dense(onehot, 100,
+            input_layer = tf.layers.dense(onehot, args.hidden_size,
                     activation=tf.nn.relu)
-            hidden_layer = tf.layers.dense(input_layer, 100,
+            input_layer_dropout = tf.layers.dropout(input_layer, rate=args.dropout, training=self.dropout)
+            hidden_layer = tf.layers.dense(input_layer_dropout, args.hidden_size,
                     activation=tf.nn.relu)
             flat = tf.layers.flatten(hidden_layer)
             # self.output_layer = tf.layers.dense(flat, 1, activation=None)
@@ -133,13 +138,22 @@ class Network:
             
             #self.predictions = self.output_layer
 
+            # lr decay
+            global_step = tf.train.create_global_step()
+            learning_rate = args.learning_rate
+            if args.learning_rate_final:
+                # compute parameters
+                decay_rate = (args.learning_rate_final/args.learning_rate)**(1/(args.epochs-1))
+                learning_rate = tf.train.exponential_decay(args.learning_rate,
+                        global_step, args.batches_per_epoch, decay_rate,
+                        name="learning_rate")
+
             # TODO: Define training
             loss = tf.losses.sparse_softmax_cross_entropy(self.labels,
                     self.output_layer, scope="loss")
             # loss = tf.losses.sparse_softmax_cross_entropy(self.labels,
             #         self.predictions, scope="loss")
-            self.training = tf.train.AdamOptimizer().minimize(loss,
-                    global_step=tf.train.create_global_step())
+            self.training = tf.train.AdamOptimizer(learning_rate).minimize(loss, global_step=global_step)
 
             # Summaries
             self.accuracy = tf.reduce_mean(tf.cast(tf.equal(self.labels, self.predictions), tf.float32))
@@ -159,10 +173,13 @@ class Network:
                 tf.contrib.summary.initialize(session=self.session, graph=self.session.graph)
 
     def train(self, windows, labels):
-        self.session.run([self.training, self.summaries["train"]], {self.windows: windows, self.labels: labels})
+        self.session.run([self.training, self.summaries["train"]],
+                {self.windows: windows, self.labels: labels, self.dropout: True})
 
     def evaluate(self, dataset, windows, labels):
-        return self.session.run((self.accuracy, self.predictions, self.summaries[dataset]), {self.windows: windows, self.labels: labels})
+        return self.session.run((self.accuracy, self.predictions,
+            self.summaries[dataset]), {self.windows: windows, self.labels:
+                labels, self.dropout: False})
 
 
 if __name__ == "__main__":
@@ -176,11 +193,15 @@ if __name__ == "__main__":
 
     # Parse arguments
     parser = argparse.ArgumentParser()
+    parser.add_argument("--hidden_size", default=100, type=int, help="Hidden layer size.")
     parser.add_argument("--alphabet_size", default=100, type=int, help="Alphabet size.")
     parser.add_argument("--batch_size", default=50, type=int, help="Batch size.")
-    parser.add_argument("--epochs", default=10, type=int, help="Number of epochs.")
+    parser.add_argument("--epochs", default=2, type=int, help="Number of epochs.")
     parser.add_argument("--threads", default=1, type=int, help="Maximum number of threads to use.")
     parser.add_argument("--window", default=5, type=int, help="Size of the window to use.")
+    parser.add_argument("--dropout", default=0.0, type=float, help="Dropout rate.")
+    parser.add_argument("--learning_rate", default=0.001, type=float, help="Initial learning rate.");
+    parser.add_argument("--learning_rate_final", default=None, type=float, help="Final learning rate.");
     args = parser.parse_args()
 
     # Create logdir name
@@ -196,23 +217,25 @@ if __name__ == "__main__":
     dev = Dataset("uppercase_data_dev.txt", args.window, alphabet=train.alphabet)
     test = Dataset("uppercase_data_test.txt", args.window, alphabet=train.alphabet)
 
+    args.batches_per_epoch = train.num_examples() // args.batch_size
+
     # Construct the network
     network = Network(threads=args.threads)
     network.construct(args)
 
     # Train
+    dev_windows, dev_labels = dev.all_data()
     for i in range(args.epochs):
         while not train.epoch_finished():
             windows, labels = train.next_batch(args.batch_size)
             network.train(windows, labels)
 
-        dev_windows, dev_labels = dev.all_data()
-        network.evaluate("dev", dev_windows, dev_labels)
-
+        accuracy, _, _ = network.evaluate("dev", dev_windows, dev_labels)
+        print(accuracy)
+    
     # TODO: Generate the uppercased test set
     test_windows, test_labels = test.all_data()
-    accuracy, predictions, _ = network.evaluate("test", test_windows, test_labels)
-    print(accuracy)
+    _, predictions, _ = network.evaluate("test", test_windows, test_labels)
     result = ""
     for letter, prediction in zip(test.text, predictions):
         # result += letter.upper() if prediction else letter.lower()
