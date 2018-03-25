@@ -155,8 +155,8 @@ if __name__ == "__main__":
         print("{:.2f}".format(100 * accuracy))
 
     # TODO: Compute test_labels, as numbers 0-9, corresponding to mnist.test.images
-    predictions = network.evaluate("test", mnist.validation.images,
-            mnist.validation.labels)[1]
+    predictions = network.evaluate("test", mnist.test.images,
+            mnist.test.labels)[1]
     test_labels = predictions
 
     for label in test_labels:
