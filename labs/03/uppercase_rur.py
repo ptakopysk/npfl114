@@ -195,10 +195,10 @@ if __name__ == "__main__":
 
     # Parse arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument("--hidden_size", default=100, type=int, help="Hidden layer size.")
+    parser.add_argument("--hidden_size", default=200, type=int, help="Hidden layer size.")
     parser.add_argument("--alphabet_size", default=100, type=int, help="Alphabet size.")
     parser.add_argument("--batch_size", default=50, type=int, help="Batch size.")
-    parser.add_argument("--epochs", default=2, type=int, help="Number of epochs.")
+    parser.add_argument("--epochs", default=10, type=int, help="Number of epochs.")
     parser.add_argument("--threads", default=1, type=int, help="Maximum number of threads to use.")
     parser.add_argument("--window", default=5, type=int, help="Size of the window to use.")
     parser.add_argument("--dropout", default=0.0, type=float, help="Dropout rate.")
