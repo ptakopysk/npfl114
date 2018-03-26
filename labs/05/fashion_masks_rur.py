@@ -91,6 +91,14 @@ class Network:
 
             # Summaries
             accuracy = tf.reduce_mean(tf.cast(tf.equal(self.labels, self.labels_predictions), tf.float32))
+            # tohle je podmínka na tenzorech, porovnává to zlatej lejbl a
+            # predicted lejbl (vskutečnosti je jich celej batch, proto nejde
+            # tf.cond a musí bejt tf.where), a buď to vrací tu skutečně
+            # predikovanou amsku, anebo masku nul ve tvaru tý predikovaný masky
+            # (to je to zeros_like, a ještě existuje ones_like, a případně
+            # iobecný fill nějaký);
+            # ale na to když chci predikovat 0 nebo 1 tak mi stačí něco jako
+            # tf.round()
             only_correct_masks = tf.where(tf.equal(self.labels, self.labels_predictions),
                                           self.masks_predictions, tf.zeros_like(self.masks_predictions))
             intersection = tf.reduce_sum(only_correct_masks * self.masks, axis=[1,2,3])
