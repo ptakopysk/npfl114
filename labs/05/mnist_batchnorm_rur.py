@@ -39,7 +39,6 @@ class Network:
             #   `tf.get_collection(tf.GraphKeys.UPDATE_OPS)` and utilized either directly in `session.run`,
             #   or (preferably) attached to `self.train` using `tf.control_dependencies`.
             # Store result in `features`.
-            # CNN Computation
             
             # MY NOTES
             # session.run -- add target to run update operations
@@ -49,16 +48,6 @@ class Network:
             # with tf.control_dependencies(operace jakov session.run)
             #   self.train = optimizer.minimize(loss)
             
-            # TODO: Add layers described in the args.cnn. Layers are separated by a comma and can be:
-            # - C-filters-kernel_size-stride-padding: Add a convolutional layer with ReLU activation and
-            #   specified number of filters, kernel size, stride and padding. Example: C-10-3-1-same
-            # - M-kernel_size-stride: Add max pooling with specified size and stride. Example: M-3-2
-            # - F: Flatten inputs --- tim se ztratí shape takže už nejde dělal
-            # cnn ale zato jde dělat densely connected (někdy to tam přijde
-            # takže nakonec to bude v poho)
-            # - R-hidden_layer_size: Add a dense layer with ReLU activation and specified size. Ex: R-100
-            # Store result in `features`.
-
             layer = self.images
             for definition in args.cnn.split(','):
                 parameters = definition.split('-')
@@ -69,6 +58,16 @@ class Network:
                             int(parameters[3]),
                             parameters[4],
                             activation=tf.nn.relu)
+                elif parameters[0] == 'CB':
+                    c_layer = tf.layers.conv2d(layer,
+                            int(parameters[1]),
+                            int(parameters[2]),
+                            int(parameters[3]),
+                            parameters[4],
+                            activation=None,
+                            use_bias=False)
+                    bn_layer = tf.layers.batch_normalization(c_layer, training=self.is_training)
+                    layer = tf.nn.relu(bn_layer)
                 elif parameters[0] == 'M':
                     layer = tf.layers.max_pooling2d(layer,
                             int(parameters[1]),
@@ -80,13 +79,16 @@ class Network:
                 else:
                     assert False, "invalid definition " + definition
 
+            batch_norm_mean_variance = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+            
             output_layer = tf.layers.dense(layer, self.LABELS, activation=None, name="output_layer")
             self.predictions = tf.argmax(output_layer, axis=1)
 
             # Training
             loss = tf.losses.sparse_softmax_cross_entropy(self.labels, output_layer, scope="loss")
             global_step = tf.train.create_global_step()
-            self.training = tf.train.AdamOptimizer().minimize(loss, global_step=global_step, name="training")
+            with tf.control_dependencies(batch_norm_mean_variance):
+                self.training = tf.train.AdamOptimizer().minimize(loss, global_step=global_step, name="training")
 
             # Summaries
             self.accuracy = tf.reduce_mean(tf.cast(tf.equal(self.labels, self.predictions), tf.float32))
@@ -106,10 +108,13 @@ class Network:
                 tf.contrib.summary.initialize(session=self.session, graph=self.session.graph)
 
     def train(self, images, labels):
-        self.session.run([self.training, self.summaries["train"]], {self.images: images, self.labels: labels})
+        self.session.run([self.training, self.summaries["train"]], {self.images:
+            images, self.labels: labels, self.is_training: True})
 
     def evaluate(self, dataset, images, labels):
-        accuracy, _ = self.session.run([self.accuracy, self.summaries[dataset]], {self.images: images, self.labels: labels})
+        accuracy, _ = self.session.run([self.accuracy, self.summaries[dataset]],
+                {self.images: images, self.labels: labels, self.is_training:
+                    False})
         return accuracy
 
 
